@@ -7,192 +7,183 @@ class ChatServer:
     def __init__(self, host='127.0.0.1', port=5555):
         self.host = host
         self.port = port
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        
-        # Quản lý trạng thái
-        self.clients = {}  # {username: {"socket": conn, "is_admin": bool}}
-        self.lock = threading.Lock() # Bảo vệ self.clients
-        
+        self.clients = {}  # {username: client_socket}
+        self.lock = threading.Lock()
         self.admin_password = "admin"
         self.ban_file = "bans.txt"
+        self.log_file = "server.log"
         
-        # Đảm bảo file ban tồn tại
+        # Tạo file bans.txt nếu chưa có
         if not os.path.exists(self.ban_file):
             open(self.ban_file, 'w').close()
 
-    def log(self, message):
-        """Ghi log hệ thống vào file và in ra console"""
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log_msg = f"[{timestamp}] {message}"
-        print(log_msg)
-        with open("server.log", "a", encoding="utf-8") as f:
-            f.write(log_msg + "\n")
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    def log_activity(self, message):
+        """Ghi log mọi hoạt động của Server"""
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        log_line = f"[{timestamp}] {message}"
+        print(log_line)
+        with open(self.log_file, 'a', encoding='utf-8') as f:
+            f.write(log_line + '\n')
 
     def is_banned(self, username):
-        with open(self.ban_file, "r") as f:
+        """Kiểm tra user có bị ban không"""
+        with open(self.ban_file, 'r', encoding='utf-8') as f:
             banned_users = f.read().splitlines()
         return username in banned_users
 
     def ban_user(self, username):
-        with open(self.ban_file, "a") as f:
-            f.write(username + "\n")
+        """Thêm user vào danh sách ban"""
+        with open(self.ban_file, 'a', encoding='utf-8') as f:
+            f.write(username + '\n')
+
+    def broadcast(self, message, sender_socket=None):
+        """Gửi tin nhắn cho toàn bộ phòng"""
+        with self.lock:
+            for user, client in self.clients.items():
+                if client != sender_socket:
+                    try:
+                        client.send(message.encode('utf-8'))
+                    except:
+                        pass # Sẽ được xử lý bởi Ghost Client Cleanup
+
+    def remove_client(self, username):
+        """Dọn dẹp Ghost Client an toàn khỏi RAM"""
+        with self.lock:
+            if username in self.clients:
+                self.clients[username].close()
+                del self.clients[username]
+                self.log_activity(f"User '{username}' đã rời phòng.")
+                self.broadcast(f"[SERVER] {username} đã rời phòng.")
+
+    def handle_client(self, client_socket, address):
+        """Luồng riêng xử lý từng Client"""
+        username = None
+        try:
+            # GĐ 2: Xử lý Login
+            while True:
+                login_msg = client_socket.recv(1024).decode('utf-8')
+                parts = login_msg.split(' ', 2)
+                
+                if len(parts) >= 2 and parts[0] == '/login':
+                    temp_user = parts[1]
+                    
+                    if self.is_banned(temp_user):
+                        client_socket.send("[ERROR] Tài khoản của bạn đã bị BAN vĩnh viễn!".encode('utf-8'))
+                        return
+                    
+                    with self.lock:
+                        if temp_user in self.clients:
+                            client_socket.send("[ERROR] Username đã tồn tại. Thử lại!".encode('utf-8'))
+                            continue
+                    
+                    if temp_user.lower() == "admin":
+                        if len(parts) < 3 or parts[2] != self.admin_password:
+                            client_socket.send("[ERROR] Sai mật khẩu Admin!".encode('utf-8'))
+                            continue
+
+                    username = temp_user
+                    with self.lock:
+                        self.clients[username] = client_socket
+                    
+                    client_socket.send("[SUCCESS] Đăng nhập thành công!".encode('utf-8'))
+                    self.log_activity(f"Client {address} đăng nhập với tên '{username}'.")
+                    self.broadcast(f"[SERVER] {username} đã tham gia phòng chat!")
+                    break
+
+            # GĐ 3 & 5: Routing & Xử lý lệnh
+            while True:
+                message = client_socket.recv(1024).decode('utf-8')
+                if not message:
+                    break
+
+                self.log_activity(f"[{username}] gửi lệnh: {message}")
+                parts = message.split(' ', 1)
+                command = parts[0]
+
+                if command == '/list':
+                    with self.lock:
+                        users = ", ".join(self.clients.keys())
+                    client_socket.send(f"[SERVER] Danh sách Online: {users}".encode('utf-8'))
+
+                elif command == '/all':
+                    if len(parts) > 1:
+                        self.broadcast(f"[ALL] {username}: {parts[1]}", client_socket)
+                    else:
+                        client_socket.send("[SYSTEM] Lỗi: Tham số không hợp lệ. Dùng: /all <nội dung>".encode('utf-8'))
+
+                elif command == '/msg':
+                    sub_parts = parts[1].split(' ', 1) if len(parts) > 1 else []
+                    if len(sub_parts) == 2:
+                        target, content = sub_parts
+                        with self.lock:
+                            target_sock = self.clients.get(target)
+                        if target_sock:
+                            target_sock.send(f"[PRIVATE từ {username}]: {content}".encode('utf-8'))
+                        else:
+                            client_socket.send(f"[SERVER] Không tìm thấy user '{target}'.".encode('utf-8'))
+                    else:
+                        client_socket.send("[SYSTEM] Lỗi: Dùng /msg <username> <nội dung>".encode('utf-8'))
+
+                elif command in ['/kick', '/ban']:
+                    if username.lower() != 'admin':
+                        client_socket.send("[SERVER] Lỗi: Bạn không có quyền thực hiện lệnh này.".encode('utf-8'))
+                        continue
+                    
+                    if len(parts) > 1:
+                        target = parts[1]
+                        with self.lock:
+                            target_sock = self.clients.get(target)
+                        
+                        if target_sock:
+                            target_sock.send("[SERVER] Bạn đã bị đuổi khỏi phòng!".encode('utf-8'))
+                            if command == '/ban':
+                                self.ban_user(target)
+                                self.broadcast(f"[SERVER] Admin đã BAN vĩnh viễn {target}.")
+                            else:
+                                self.broadcast(f"[SERVER] Admin đã KICK {target}.")
+                            # Đóng kết nối target (Thread của target sẽ tự văng exception 10054 hoặc thoát)
+                            target_sock.close() 
+                        else:
+                            client_socket.send(f"[SERVER] Không tìm thấy user '{target}'.".encode('utf-8'))
+                    else:
+                        client_socket.send(f"[SYSTEM] Lỗi: Dùng {command} <username>".encode('utf-8'))
+
+                elif command == '/quit':
+                    client_socket.send("[SERVER] Tạm biệt!".encode('utf-8'))
+                    break
+                else:
+                    client_socket.send("[SERVER] Lệnh không hợp lệ.".encode('utf-8'))
+
+        except ConnectionResetError:
+            # Lỗi WinError 10054: Client tắt đột ngột
+            self.log_activity(f"Cảnh báo: Client {address} (User: {username}) mất kết nối đột ngột.")
+        except Exception as e:
+            self.log_activity(f"Lỗi không xác định với {username}: {e}")
+        finally:
+            if username:
+                self.remove_client(username)
+            else:
+                client_socket.close()
 
     def start(self):
         try:
             self.server_socket.bind((self.host, self.port))
-            self.server_socket.listen()
-            self.log(f"Server đang chạy tại {self.host}:{self.port}...")
-        except OSError as e:
-            if e.errno == 10048: # WinError 10048: Trùng Port
-                print("Lỗi: Port này đã được sử dụng. Hãy kiểm tra lại!")
-            return
-
-        while True:
-            conn, addr = self.server_socket.accept()
-            thread = threading.Thread(target=self.handle_client, args=(conn, addr))
-            thread.start()
-
-    def handle_client(self, conn, addr):
-        self.log(f"Kết nối mới từ {addr}")
-        username = None
-        is_admin = False
-
-        try:
+            self.server_socket.listen(5)
+            self.log_activity(f"Server đang chạy tại {self.host}:{self.port}")
+            
             while True:
-                data = conn.recv(1024)
-                if not data:
-                    break
-                
-                message = data.decode('utf-8').strip()
-                if not message:
-                    continue
-
-                parts = message.split(' ', 1)
-                command = parts[0]
-
-                # Xử lý khi chưa đăng nhập
-                if not username:
-                    if command == "/login":
-                        if len(parts) < 2:
-                            conn.send("Lỗi: Cú pháp /login <username> [password]\n".encode())
-                            continue
-                        
-                        login_info = parts[1].split(' ', 1)
-                        req_username = login_info[0]
-
-                        if self.is_banned(req_username):
-                            conn.send("Bạn đã bị khóa khỏi máy chủ.\n".encode())
-                            break
-
-                        with self.lock:
-                            if req_username in self.clients:
-                                conn.send("Tên đăng nhập đã tồn tại.\n".encode())
-                                continue
-                            
-                            # Kiểm tra Admin
-                            if req_username.lower() == "admin":
-                                if len(login_info) < 2 or login_info[1] != self.admin_password:
-                                    conn.send("Sai mật khẩu Admin.\n".encode())
-                                    continue
-                                is_admin = True
-
-                            username = req_username
-                            self.clients[username] = {"socket": conn, "is_admin": is_admin}
-                        
-                        role = "ADMIN" if is_admin else "USER"
-                        conn.send(f"Đăng nhập thành công với tư cách {role}.\n".encode())
-                        self.log(f"{username} đã đăng nhập.")
-                    else:
-                        conn.send("Vui lòng đăng nhập bằng: /login <username>\n".encode())
-                    continue
-
-                # ROUTING: Bộ điều hướng lệnh sau khi đăng nhập
-                if command == "/list":
-                    with self.lock:
-                        online_users = ", ".join(self.clients.keys())
-                    conn.send(f"Online: {online_users}\n".encode())
-
-                elif command == "/all":
-                    if len(parts) < 2:
-                        conn.send("Cú pháp: /all <nội dung>\n".encode())
-                        continue
-                    self.broadcast(f"[ALL] {username}: {parts[1]}", sender=username)
-
-                elif command == "/msg":
-                    if len(parts) < 2:
-                        conn.send("Cú pháp: /msg <username> <nội dung>\n".encode())
-                        continue
-                    msg_parts = parts[1].split(' ', 1)
-                    if len(msg_parts) < 2:
-                        conn.send("Cú pháp: /msg <username> <nội dung>\n".encode())
-                        continue
-                    self.send_private(msg_parts[0], f"[Private từ {username}]: {msg_parts[1]}", conn)
-
-                elif command == "/kick" or command == "/ban":
-                    if not is_admin:
-                        conn.send("Lỗi: Chỉ Admin mới có quyền này.\n".encode())
-                        continue
-                    if len(parts) < 2:
-                        conn.send(f"Cú pháp: {command} <username>\n".encode())
-                        continue
-                    target_user = parts[1]
-                    self.kick_user(target_user, ban=(command == "/ban"))
-
-                elif command == "/quit":
-                    break
-                else:
-                    conn.send("Lệnh không hợp lệ.\n".encode())
-
-        except ConnectionResetError:
-            # WinError 10054: Client tắt đột ngột (rút dây mạng, tắt console chữ X)
-            self.log(f"Mất kết nối đột ngột từ {addr}")
-        except Exception as e:
-            self.log(f"Lỗi Client {addr}: {str(e)}")
+                client_socket, address = self.server_socket.accept()
+                self.log_activity(f"Chấp nhận kết nối từ {address}")
+                # Đẩy việc xử lý cho luồng riêng
+                client_thread = threading.Thread(target=self.handle_client, args=(client_socket, address))
+                client_thread.start()
+        except OSError:
+            # Lỗi WinError 10048: Cổng đã được sử dụng
+            print(f"[ERROR] Port {self.port} đã bị chiếm dụng. Vui lòng đổi Port khác!")
         finally:
-            # DỌN DẸP GHOST CLIENT
-            if username:
-                with self.lock:
-                    if username in self.clients:
-                        del self.clients[username]
-                self.log(f"{username} đã thoát.")
-                self.broadcast(f"Hệ thống: {username} đã rời phòng.", sender=None)
-            conn.close()
-
-    def broadcast(self, message, sender=None):
-        with self.lock:
-            for user, info in self.clients.items():
-                if user != sender:
-                    try:
-                        info["socket"].send((message + "\n").encode('utf-8'))
-                    except:
-                        pass
-
-    def send_private(self, target_user, message, sender_conn):
-        with self.lock:
-            if target_user in self.clients:
-                try:
-                    self.clients[target_user]["socket"].send((message + "\n").encode('utf-8'))
-                except:
-                    pass
-            else:
-                sender_conn.send(f"Lỗi: User '{target_user}' không online.\n".encode())
-
-    def kick_user(self, target_user, ban=False):
-        with self.lock:
-            if target_user in self.clients:
-                target_conn = self.clients[target_user]["socket"]
-                try:
-                    msg = "Bạn đã bị BAN vĩnh viễn!" if ban else "Bạn đã bị KICK khỏi máy chủ!"
-                    target_conn.send((msg + "\n").encode('utf-8'))
-                    target_conn.close() # Cắt kết nối ngay lập tức
-                except:
-                    pass
-                if ban:
-                    self.ban_user(target_user)
-                    self.log(f"Admin đã BAN {target_user}")
-                else:
-                    self.log(f"Admin đã KICK {target_user}")
-                self.broadcast(f"Hệ thống: {target_user} đã bị {'BAN' if ban else 'KICK'} bởi Admin.")
+            self.server_socket.close()
 
 if __name__ == "__main__":
     server = ChatServer()
