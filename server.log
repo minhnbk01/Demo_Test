@@ -19,3 +19,47 @@
 [2026-03-26 20:57:57] admin đã thoát.
 [2026-03-26 20:58:00] Mất kết nối đột ngột từ ('127.0.0.1', 50059)
 [2026-03-26 20:58:00] minh đã thoát.
+[2026-03-26 22:03:26] Server đang chạy tại 127.0.0.1:5555
+[2026-03-26 22:03:35] Chấp nhận kết nối từ ('127.0.0.1', 59188)
+[2026-03-26 22:03:37] Client ('127.0.0.1', 59188) đăng nhập với tên 'minh'.
+[2026-03-26 22:03:55] Chấp nhận kết nối từ ('127.0.0.1', 61403)
+[2026-03-26 22:04:01] Client ('127.0.0.1', 61403) đăng nhập với tên 'admin'.
+[2026-03-26 22:04:08] [admin] gửi lệnh: /kick minh
+[2026-03-26 22:04:08] Lỗi không xác định với minh: [WinError 10053] An established connection was aborted by the software in your host machine
+[2026-03-26 22:04:08] User 'minh' đã rời phòng.
+[2026-03-26 22:04:35] Chấp nhận kết nối từ ('127.0.0.1', 64533)
+[2026-03-26 22:05:01] Chấp nhận kết nối từ ('127.0.0.1', 54697)
+[2026-03-26 22:05:14] [admin] gửi lệnh: /all ?
+[2026-03-26 22:08:09] Server đang chạy tại 127.0.0.1:5555
+[2026-03-26 22:08:16] Chấp nhận kết nối từ ('127.0.0.1', 64132)
+[2026-03-26 22:08:17] Client ('127.0.0.1', 64132) đăng nhập với tên 'minh'.
+[2026-03-26 22:08:27] Chấp nhận kết nối từ ('127.0.0.1', 64133)
+[2026-03-26 22:08:33] Client ('127.0.0.1', 64133) đăng nhập với tên 'admin'.
+[2026-03-26 22:08:43] [admin] gửi lệnh: /all ????
+[2026-03-26 22:08:54] [minh] gửi lệnh: /msg admin alo
+[2026-03-26 22:09:07] [admin] gửi lệnh: /kick minh
+[2026-03-26 22:09:07] Lỗi không xác định với minh: [WinError 10053] An established connection was aborted by the software in your host machine
+[2026-03-26 22:09:07] User 'minh' đã rời phòng.
+[2026-03-26 22:09:18] Chấp nhận kết nối từ ('127.0.0.1', 64137)
+[2026-03-26 22:11:11] Cảnh báo: Client ('127.0.0.1', 64133) (User: admin) mất kết nối đột ngột.
+[2026-03-26 22:11:19] Server đang chạy tại 127.0.0.1:5555
+[2026-03-26 22:11:25] Chấp nhận kết nối từ ('127.0.0.1', 54227)
+[2026-03-26 22:11:27] Client ('127.0.0.1', 54227) đăng nhập với tên 'minh'.
+[2026-03-26 22:11:34] Chấp nhận kết nối từ ('127.0.0.1', 54229)
+[2026-03-26 22:11:39] Client ('127.0.0.1', 54229) đăng nhập với tên 'admin'.
+[2026-03-26 22:11:42] [admin] gửi lệnh: /kick minh
+[2026-03-26 22:11:42] User 'minh' đã rời phòng.
+[2026-03-26 22:11:42] Lỗi không xác định với minh: [WinError 10038] An operation was attempted on something that is not a socket
+[2026-03-26 22:11:50] Chấp nhận kết nối từ ('127.0.0.1', 54230)
+[2026-03-26 22:11:51] Client ('127.0.0.1', 54230) đăng nhập với tên 'minh'.
+[2026-03-26 22:15:06] Server đang chạy tại 127.0.0.1:5555
+[2026-03-26 22:15:12] Chấp nhận kết nối từ ('127.0.0.1', 61476)
+[2026-03-26 22:15:14] Client ('127.0.0.1', 61476) đăng nhập với tên 'minh'.
+[2026-03-26 22:15:21] Chấp nhận kết nối từ ('127.0.0.1', 63918)
+[2026-03-26 22:15:29] Client ('127.0.0.1', 63918) đăng nhập với tên 'admin'.
+[2026-03-26 22:17:50] [minh] gửi lệnh: /list
+[2026-03-26 22:20:25] [admin] gửi lệnh: /list
+[2026-03-26 22:20:32] [minh] gửi lệnh: /all alo
+[2026-03-26 22:20:37] [minh] gửi lệnh: /msg admin
+[2026-03-26 22:20:47] [minh] gửi lệnh: /msg admin ?
+[2026-03-26 22:20:54] [minh] gửi lệnh: /kick admin
